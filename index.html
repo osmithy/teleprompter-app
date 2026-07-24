@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#000000" />
+<!-- iOS "add to home screen" / standalone app hints -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Teleprompter" />
+<meta name="mobile-web-app-capable" content="yes" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<title>Teleprompter</title>
+<style>
+  :root{
+    --accent:#ff3b30;      /* record red */
+    --bg:#000;
+    --panel:rgba(20,20,22,.92);
+    --pill:rgba(30,30,34,.72);
+    --text:#fff;
+    --muted:#9a9aa2;
+    --line:rgba(255,255,255,.12);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    overscroll-behavior:none}
+  body{overflow:hidden;position:fixed;inset:0;width:100%;height:100%}
+  button{font-family:inherit;color:inherit;border:0;background:none;cursor:pointer}
+  .hidden{display:none !important}
+
+  /* ---------- Screens ---------- */
+  .screen{position:absolute;inset:0}
+
+  /* ---------- Editor screen ---------- */
+  #editor{display:flex;flex-direction:column;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));gap:12px;background:#0b0b0d}
+  #editor header{display:flex;align-items:center;justify-content:space-between}
+  #editor header h1{font-size:20px;margin:0;font-weight:650;letter-spacing:.2px}
+  #editor header h1 span{color:var(--accent)}
+  .icon-btn{width:44px;height:44px;border-radius:12px;background:var(--pill);display:flex;align-items:center;justify-content:center;font-size:20px}
+  #script{flex:1;min-height:0;width:100%;resize:none;border-radius:14px;border:1px solid var(--line);
+    background:#141417;color:#fff;padding:14px;font-size:17px;line-height:1.5}
+  #script::placeholder{color:#5f5f68}
+  .editor-actions{display:flex;gap:10px}
+  .primary{flex:1;height:54px;border-radius:14px;background:var(--accent);color:#fff;font-size:18px;font-weight:650;
+    display:flex;align-items:center;justify-content:center;gap:8px}
+  .ghost{height:54px;padding:0 18px;border-radius:14px;background:var(--pill);font-size:16px;font-weight:550}
+  .hint{color:var(--muted);font-size:13px;line-height:1.45;margin:0}
+
+  /* ---------- Prompter screen ---------- */
+  #preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  #preview.mirror{transform:scaleX(-1)}
+
+  /* the text stage = configurable box the script scrolls within */
+  #stage{position:absolute;top:0;bottom:0;overflow:hidden;pointer-events:auto;
+    background:linear-gradient(90deg,rgba(0,0,0,var(--dim)) 0%,rgba(0,0,0,var(--dim)) 100%);
+    -webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 12%,#000 88%,transparent 100%);
+    mask-image:linear-gradient(to bottom,transparent 0%,#000 12%,#000 88%,transparent 100%)}
+  #scroller{position:absolute;left:0;right:0;top:0;will-change:transform}
+  #scriptText{padding:0 22px;font-weight:600;line-height:1.35;color:#fff;
+    text-shadow:0 2px 10px rgba(0,0,0,.85),0 0 2px rgba(0,0,0,.9);white-space:pre-wrap;word-break:break-word}
+  /* first/last line can reach the focus point (vertical centre of the stage) */
+  #padTop,#padBot{height:50vh}
+  #focusLine{position:absolute;left:0;right:0;top:50%;height:0;border-top:2px solid rgba(255,59,48,.55);
+    box-shadow:0 0 8px rgba(255,59,48,.4);pointer-events:none}
+  #focusLine::before,#focusLine::after{content:"";position:absolute;top:-6px;border:6px solid transparent}
+  #focusLine::before{left:0;border-left-color:rgba(255,59,48,.7)}
+  #focusLine::after{right:0;border-right-color:rgba(255,59,48,.7)}
+
+  /* top bar */
+  #topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;
+    padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));
+    background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);z-index:6;transition:opacity .3s}
+  #topbar .pill{background:var(--pill);border-radius:11px;height:40px;display:flex;align-items:center;padding:0 14px;font-size:15px;font-weight:550;gap:6px}
+  #resInfo{font-variant-numeric:tabular-nums;color:#cfe9cf;font-size:13px}
+  #resInfo.warn{color:#ffd479}
+  .spacer{flex:1}
+
+  /* side controls (right side, opposite the left text column) */
+  #sideControls{position:absolute;right:max(14px,env(safe-area-inset-right));top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;gap:16px;align-items:center;z-index:6;transition:opacity .3s}
+  /* when the text sits on the right, move controls to the left so they don't overlap */
+  #sideControls.left-side{right:auto;left:max(14px,env(safe-area-inset-left))}
+  .ctrl{width:60px;height:60px;border-radius:50%;background:var(--pill);display:flex;align-items:center;justify-content:center;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  .ctrl svg{width:26px;height:26px;fill:#fff}
+  .ctrl.small{width:50px;height:50px}
+  .ctrl.small svg{width:22px;height:22px}
+  #recBtn{width:74px;height:74px;border-radius:50%;background:rgba(0,0,0,.35);border:3px solid rgba(255,255,255,.85);padding:0;display:flex;align-items:center;justify-content:center}
+  #recDot{width:34px;height:34px;border-radius:50%;background:var(--accent);transition:all .18s}
+  #recBtn.recording #recDot{border-radius:7px;width:26px;height:26px}
+  #recBtn:disabled{opacity:.4}
+
+  #recIndicator{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.6);border-radius:20px;padding:6px 14px;display:flex;align-items:center;gap:8px;font-size:14px;
+    font-weight:600;font-variant-numeric:tabular-nums;z-index:7}
+  #recIndicator .dot{width:11px;height:11px;border-radius:50%;background:var(--accent);animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:.25}}
+
+  #countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:9;
+    background:rgba(0,0,0,.35);font-size:22vh;font-weight:800;text-shadow:0 4px 30px rgba(0,0,0,.6)}
+
+  .center-msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:24px;gap:12px;z-index:8}
+  #camError{background:rgba(0,0,0,.82)}
+  #camError h2{margin:0;font-size:20px}
+  #camError p{margin:0;color:var(--muted);font-size:15px;max-width:520px;line-height:1.5}
+  #rotateHint{background:rgba(0,0,0,.7);z-index:8;font-size:18px;font-weight:600}
+  #rotateHint .rot{font-size:52px;animation:spin 2.4s ease-in-out infinite}
+  @keyframes spin{0%,100%{transform:rotate(0)}50%{transform:rotate(90deg)}}
+
+  /* ---------- Slide-up panels (settings / review) ---------- */
+  .panel{position:absolute;inset:0;z-index:20;background:rgba(0,0,0,.55);display:flex;align-items:flex-end}
+  .sheet{width:100%;max-height:92%;overflow:auto;background:var(--panel);border-radius:20px 20px 0 0;
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    padding:14px max(18px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}
+  .grabber{width:40px;height:5px;border-radius:3px;background:#5a5a62;margin:0 auto 12px}
+  .sheet h2{margin:2px 0 14px;font-size:18px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .row label{font-size:15px;font-weight:550}
+  .row .val{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;min-width:56px;text-align:right}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:58%;height:30px;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:#4a4a52}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;background:#fff;margin-top:-11px;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+  .seg{display:flex;background:#2a2a30;border-radius:10px;padding:3px;gap:2px}
+  .seg button{padding:8px 14px;border-radius:8px;font-size:14px;font-weight:600;color:var(--muted)}
+  .seg button.on{background:#4a4a55;color:#fff}
+  .switch{width:52px;height:32px;border-radius:16px;background:#39393f;position:relative;transition:background .2s}
+  .switch.on{background:#34c759}
+  .switch::after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;transition:left .2s}
+  .switch.on::after{left:23px}
+  .sheet .done{width:100%;height:50px;border-radius:14px;background:var(--pill);font-size:16px;font-weight:600;margin-top:14px}
+
+  /* review */
+  #review .sheet{max-height:96%}
+  #reviewVideo{width:100%;border-radius:14px;background:#000;max-height:56vh}
+  .review-actions{display:flex;gap:10px;margin-top:14px}
+  .review-actions button{flex:1;height:52px;border-radius:14px;font-size:16px;font-weight:600}
+  #saveBtn{background:#34c759;color:#052}
+  #reRecBtn{background:var(--pill)}
+  #discardBtn{background:rgba(255,59,48,.18);color:#ff6b61;flex:0 0 auto;padding:0 16px}
+  #reviewMeta{color:var(--muted);font-size:13px;margin:10px 2px 0;line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- ============ EDITOR ============ -->
+<section id="editor" class="screen">
+  <header>
+    <h1>Tele<span>prompter</span></h1>
+    <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙</button>
+  </header>
+  <textarea id="script" placeholder="Paste or type your script here…"></textarea>
+  <div class="editor-actions">
+    <button class="primary" id="startBtn">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4Z"/></svg>
+      Start camera
+    </button>
+  </div>
+  <p class="hint">Rotate your phone to landscape with the <b>camera on the left</b>. The text scrolls in a column next to the lens so your eyes stay on-camera. Recording stays on your phone — the text is never in the video.</p>
+</section>
+
+<!-- ============ PROMPTER ============ -->
+<section id="prompter" class="screen hidden">
+  <video id="preview" autoplay playsinline muted></video>
+
+  <div id="stage">
+    <div id="scroller">
+      <div id="padTop"></div>
+      <div id="scriptText"></div>
+      <div id="padBot"></div>
+    </div>
+    <div id="focusLine"></div>
+  </div>
+
+  <div id="topbar">
+    <button class="pill" id="backBtn">‹ Script</button>
+    <span class="pill" id="resInfo">camera…</span>
+    <span class="spacer"></span>
+    <button class="pill" id="settingsBtn2">⚙ Settings</button>
+  </div>
+
+  <div id="sideControls">
+    <button class="ctrl small" id="resetBtn" aria-label="Restart from top" title="Restart">
+      <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
+    </button>
+    <button id="recBtn" aria-label="Record"><span id="recDot"></span></button>
+    <button class="ctrl" id="playBtn" aria-label="Play/Pause scroll">
+      <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="pauseIcon" class="hidden" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+    </button>
+  </div>
+
+  <div id="recIndicator" class="hidden"><span class="dot"></span><span id="recTime">0:00</span></div>
+  <div id="countdown" class="hidden"></div>
+
+  <div id="camError" class="center-msg hidden">
+    <h2 id="camErrTitle">Camera unavailable</h2>
+    <p id="camErrMsg"></p>
+    <button class="ghost" id="camRetry">Try again</button>
+  </div>
+
+  <div id="rotateHint" class="center-msg hidden">
+    <div class="rot">▢</div>
+    <div>Rotate your phone sideways<br>(camera on the left)</div>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<div id="settings" class="panel hidden">
+  <div class="sheet">
+    <div class="grabber"></div>
+    <h2>Settings</h2>
+    <div class="row"><label>Scroll speed</label><input type="range" id="sSpeed" min="10" max="220" step="5"><span class="val" id="vSpeed"></span></div>
+    <div class="row"><label>Font size</label><input type="range" id="sFont" min="16" max="86" step="1"><span class="val" id="vFont"></span></div>
+    <div class="row"><label>Column width</label><input type="range" id="sWidth" min="25" max="100" step="1"><span class="val" id="vWidth"></span></div>
+    <div class="row"><label>Text dimming</label><input type="range" id="sDim" min="0" max="85" step="5"><span class="val" id="vDim"></span></div>
+    <div class="row"><label>Text position</label>
+      <div class="seg" id="segPos">
+        <button data-pos="left" class="on">Left</button>
+        <button data-pos="center">Center</button>
+        <button data-pos="right">Right</button>
+      </div>
+    </div>
+    <div class="row"><label>Mirror preview</label><div class="switch on" id="swMirror" role="switch"></div></div>
+    <div class="row"><label>Countdown</label>
+      <div class="seg" id="segCount">
+        <button data-c="0">Off</button>
+        <button data-c="3" class="on">3s</button>
+        <button data-c="5">5s</button>
+      </div>
+    </div>
+    <button class="done" id="settingsDone">Done</button>
+  </div>
+</div>
+
+<!-- ============ REVIEW ============ -->
+<div id="review" class="panel hidden">
+  <div class="sheet">
+    <div class="grabber"></div>
+    <h2>Your take</h2>
+    <video id="reviewVideo" controls playsinline></video>
+    <div id="reviewMeta"></div>
+    <div class="review-actions">
+      <button id="saveBtn">Save to Photos</button>
+      <button id="reRecBtn">Re-record</button>
+      <button id="discardBtn">Discard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function(){
+  const $ = s => document.querySelector(s);
+
+  // ---------- persistent settings ----------
+  const DEFAULTS = { speed:65, font:38, width:46, dim:35, pos:'left', mirror:true, count:3 };
+  let cfg = Object.assign({}, DEFAULTS, load('tp_cfg'));
+  function load(k){ try{ return JSON.parse(localStorage.getItem(k))||{}; }catch(e){ return {}; } }
+  function save(){ try{ localStorage.setItem('tp_cfg', JSON.stringify(cfg)); }catch(e){} }
+
+  // restore script text
+  const scriptEl = $('#script');
+  try{ scriptEl.value = localStorage.getItem('tp_script') || SAMPLE(); }catch(e){ scriptEl.value = SAMPLE(); }
+  scriptEl.addEventListener('input', ()=>{ try{ localStorage.setItem('tp_script', scriptEl.value); }catch(e){} });
+
+  function SAMPLE(){ return "Welcome! This is your teleprompter.\n\nPaste your own script here, then tap Start camera. Rotate your phone so the camera is on the left, and the words will scroll right beside the lens.\n\nUse the round buttons on the right to record, play, and restart. Adjust speed and text size in Settings.\n\nYou've got this."; }
+
+  // ---------- elements ----------
+  const preview = $('#preview'), stage = $('#stage'), scroller = $('#scroller'),
+        scriptText = $('#scriptText'), focusLine = $('#focusLine'),
+        resInfo = $('#resInfo'), recBtn = $('#recBtn'), playBtn = $('#playBtn'),
+        playIcon = $('#playIcon'), pauseIcon = $('#pauseIcon'),
+        recIndicator = $('#recIndicator'), recTimeEl = $('#recTime'),
+        countdownEl = $('#countdown'), camError = $('#camError'),
+        rotateHint = $('#rotateHint');
+
+  // ---------- state ----------
+  let stream=null, recorder=null, chunks=[], recBlob=null, recMime='', recExt='mp4';
+  let scrolling=false, scrollY=0, lastT=0, rafId=null;
+  let recStart=0, recTimer=null, wakeLock=null;
+
+  // ================= EDITOR -> PROMPTER =================
+  $('#startBtn').addEventListener('click', startCamera);
+  $('#backBtn').addEventListener('click', stopAndBackToEditor);
+
+  async function startCamera(){
+    show('#prompter'); hide('#editor');
+    applyCfg(); renderScript(); resetScroll();
+    camError.classList.add('hidden');
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio:true,
+        video:{ facingMode:'user',
+          width:{ ideal:1920 }, height:{ ideal:1080 }, frameRate:{ ideal:30 } }
+      });
+      preview.srcObject = stream;
+      await preview.play().catch(()=>{});
+      showResolution();
+      requestWake();
+    }catch(err){ showCamError(err); }
+    checkOrientation();
+  }
+  $('#camRetry').addEventListener('click', startCamera);
+
+  function showResolution(){
+    const t = stream && stream.getVideoTracks()[0];
+    if(!t){ resInfo.textContent='no camera'; return; }
+    const s = t.getSettings ? t.getSettings() : {};
+    const w = s.width||'?', h = s.height||'?', fr = s.frameRate?Math.round(s.frameRate):'';
+    resInfo.textContent = `${w}×${h}${fr?' · '+fr+'fps':''}`;
+    // flag if we didn't get full HD
+    const full = (w>=1920 && h>=1080) || (w>=1080 && h>=1920);
+    resInfo.classList.toggle('warn', !full);
+  }
+
+  function showCamError(err){
+    let title='Camera unavailable', msg=err && err.message || String(err);
+    const n = err && err.name;
+    if(location.protocol!=='https:' && location.hostname!=='localhost'){
+      title='Needs a secure (https) address';
+      msg='Browsers only allow camera access over https. Open this page from its https link, then reload.';
+    } else if(n==='NotAllowedError'){ title='Camera permission blocked';
+      msg='Allow camera & microphone access for this page (check the address-bar "aA" menu on iOS → Website Settings), then tap Try again.';
+    } else if(n==='NotFoundError'){ title='No camera found'; msg='This device reports no camera. Make sure nothing else is using it.'; }
+    else if(n==='NotReadableError'){ title='Camera is busy'; msg='Another app is using the camera. Close it and try again.'; }
+    $('#camErrTitle').textContent=title; $('#camErrMsg').textContent=msg;
+    camError.classList.remove('hidden');
+    resInfo.textContent='no camera'; resInfo.classList.add('warn');
+  }
+
+  function stopAndBackToEditor(){
+    stopScroll();
+    if(recorder && recorder.state!=='inactive'){ try{ recorder.stop(); }catch(e){} }
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+    releaseWake();
+    hide('#prompter'); show('#editor');
+  }
+
+  // ================= LAYOUT / CONFIG =================
+  function applyCfg(){
+    document.documentElement.style.setProperty('--dim', cfg.dim/100);
+    scriptText.style.fontSize = cfg.font+'px';
+    // column geometry
+    const w = cfg.width; // percent of viewport width
+    stage.style.width = w+'%';
+    if(cfg.pos==='left'){ stage.style.left='0'; stage.style.right='auto'; }
+    else if(cfg.pos==='right'){ stage.style.right='0'; stage.style.left='auto'; }
+    else { stage.style.left=(50-w/2)+'%'; stage.style.right='auto'; }
+    scriptText.style.textAlign = cfg.pos==='right' ? 'right' : (cfg.pos==='center'?'center':'left');
+    preview.classList.toggle('mirror', cfg.mirror);
+    // keep the control buttons on the opposite side from the text
+    document.querySelector('#sideControls').classList.toggle('left-side', cfg.pos==='right');
+    // reflect in UI
+    if($('#sSpeed').value!=cfg.speed) $('#sSpeed').value=cfg.speed;
+    $('#sFont').value=cfg.font; $('#sWidth').value=cfg.width; $('#sDim').value=cfg.dim;
+    $('#vSpeed').textContent=cfg.speed+' px/s'; $('#vFont').textContent=cfg.font+' px';
+    $('#vWidth').textContent=cfg.width+'%'; $('#vDim').textContent=cfg.dim+'%';
+    $('#swMirror').classList.toggle('on', cfg.mirror);
+    document.querySelectorAll('#segPos button').forEach(b=>b.classList.toggle('on', b.dataset.pos===cfg.pos));
+    document.querySelectorAll('#segCount button').forEach(b=>b.classList.toggle('on', +b.dataset.c===cfg.count));
+  }
+
+  function renderScript(){ scriptText.textContent = scriptEl.value.trim() || '(no script)'; }
+
+  // ================= SCROLL ENGINE =================
+  function applyScroll(){ scroller.style.transform = 'translateY(' + (-scrollY) + 'px)'; }
+  function maxScroll(){ return Math.max(0, scriptText.offsetHeight); }
+
+  function tick(t){
+    if(lastT===0) lastT=t;
+    const dt=(t-lastT)/1000; lastT=t;
+    if(scrolling){
+      scrollY += cfg.speed*dt;
+      if(scrollY >= maxScroll()){ scrollY=maxScroll(); setScrolling(false); }
+      applyScroll();
+    }
+    rafId=requestAnimationFrame(tick);
+  }
+  function ensureRAF(){ if(!rafId){ lastT=0; rafId=requestAnimationFrame(tick); } }
+  function setScrolling(on){
+    scrolling=on;
+    playIcon.classList.toggle('hidden', on);
+    pauseIcon.classList.toggle('hidden', !on);
+    if(on) ensureRAF();
+  }
+  function stopScroll(){ setScrolling(false); }
+  function resetScroll(){ scrollY=0; applyScroll(); }
+
+  playBtn.addEventListener('click', ()=> setScrolling(!scrolling));
+  $('#resetBtn').addEventListener('click', ()=>{ resetScroll(); });
+
+  // tap the video area toggles scroll; also a drag scrubs the text
+  let dragStartY=null, dragStartScroll=0, moved=false;
+  stage.addEventListener('pointerdown', e=>{ dragStartY=e.clientY; dragStartScroll=scrollY; moved=false; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove', e=>{ if(dragStartY!==null){ const dy=e.clientY-dragStartY; if(Math.abs(dy)>4){ moved=true; scrolling&&setScrolling(false); scrollY=Math.min(maxScroll(),Math.max(0,dragStartScroll-dy)); applyScroll(); } } });
+  stage.addEventListener('pointerup', e=>{ if(dragStartY!==null && !moved){ setScrolling(!scrolling); } dragStartY=null; });
+
+  // ================= RECORDING =================
+  function pickMime(){
+    const prefs=['video/mp4;codecs=h264,aac','video/mp4','video/webm;codecs=h264','video/webm;codecs=vp9,opus','video/webm'];
+    if(!window.MediaRecorder) return '';
+    for(const m of prefs){ try{ if(MediaRecorder.isTypeSupported(m)) return m; }catch(e){} }
+    return '';
+  }
+
+  recBtn.addEventListener('click', ()=>{
+    if(recorder && recorder.state==='recording'){ stopRecording(); }
+    else { beginTake(); }
+  });
+
+  async function beginTake(){
+    if(!stream){ showCamError({name:'NotFoundError'}); return; }
+    resetScroll();
+    if(cfg.count>0) await runCountdown(cfg.count);
+    startRecording();
+    setScrolling(true);
+  }
+
+  function runCountdown(n){
+    return new Promise(res=>{
+      countdownEl.classList.remove('hidden');
+      let c=n;
+      countdownEl.textContent=c;
+      const iv=setInterval(()=>{ c--; if(c<=0){ clearInterval(iv); countdownEl.classList.add('hidden'); res(); } else countdownEl.textContent=c; },1000);
+    });
+  }
+
+  function startRecording(){
+    chunks=[]; recBlob=null;
+    recMime = pickMime();
+    recExt = recMime.indexOf('mp4')>=0 ? 'mp4' : 'webm';
+    let opts={ videoBitsPerSecond:10_000_000, audioBitsPerSecond:128_000 };
+    if(recMime) opts.mimeType=recMime;
+    try{ recorder=new MediaRecorder(stream, opts); }
+    catch(e){ try{ recorder=new MediaRecorder(stream); }catch(e2){ alert('Recording is not supported in this browser.'); return; } }
+    recorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = onRecStop;
+    recorder.start(1000); // gather chunks each second (more robust on iOS)
+    recBtn.classList.add('recording');
+    recStart=Date.now(); recIndicator.classList.remove('hidden'); tickRecTime();
+    recTimer=setInterval(tickRecTime,250);
+  }
+
+  function stopRecording(){
+    if(recorder && recorder.state!=='inactive'){ try{ recorder.stop(); }catch(e){} }
+    setScrolling(false);
+    recBtn.classList.remove('recording');
+    clearInterval(recTimer); recIndicator.classList.add('hidden');
+  }
+
+  function tickRecTime(){
+    const s=Math.floor((Date.now()-recStart)/1000);
+    recTimeEl.textContent = Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+  }
+
+  function onRecStop(){
+    recBlob = new Blob(chunks, { type: (recMime||'video/mp4').split(';')[0] });
+    const url = URL.createObjectURL(recBlob);
+    const rv=$('#reviewVideo'); rv.src=url;
+    const mb=(recBlob.size/1048576).toFixed(1);
+    const t = stream && stream.getVideoTracks()[0];
+    const s = t && t.getSettings ? t.getSettings() : {};
+    $('#reviewMeta').textContent = `${s.width||'?'}×${s.height||'?'} · ${recExt.toUpperCase()} · ${mb} MB${navigator.canShare?'':' — tap Save then Share ▸ Save Video'}`;
+    show('#review');
+  }
+
+  // review actions
+  $('#saveBtn').addEventListener('click', saveRecording);
+  $('#reRecBtn').addEventListener('click', ()=>{ hide('#review'); resetScroll(); });
+  $('#discardBtn').addEventListener('click', ()=>{ recBlob=null; $('#reviewVideo').removeAttribute('src'); hide('#review'); resetScroll(); });
+
+  async function saveRecording(){
+    if(!recBlob) return;
+    const fname = 'teleprompter-'+stamp()+'.'+recExt;
+    const file = new File([recBlob], fname, { type: recBlob.type });
+    if(navigator.canShare && navigator.canShare({ files:[file] })){
+      try{ await navigator.share({ files:[file], title:'Teleprompter recording' }); return; }
+      catch(e){ if(e && e.name==='AbortError') return; /* else fall through */ }
+    }
+    const url=URL.createObjectURL(recBlob);
+    const a=document.createElement('a'); a.href=url; a.download=fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 15000);
+  }
+  function stamp(){ const d=new Date(),p=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); }
+
+  // ================= WAKE LOCK =================
+  async function requestWake(){ try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); } }catch(e){} }
+  function releaseWake(){ try{ wakeLock&&wakeLock.release(); }catch(e){} wakeLock=null; }
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && !$('#prompter').classList.contains('hidden')) requestWake(); });
+
+  // ================= ORIENTATION =================
+  function checkOrientation(){
+    const portrait = window.matchMedia('(orientation:portrait)').matches;
+    const active = !$('#prompter').classList.contains('hidden');
+    rotateHint.classList.toggle('hidden', !(portrait && active));
+  }
+  window.addEventListener('resize', ()=>{ checkOrientation(); applyScroll(); });
+  window.addEventListener('orientationchange', ()=> setTimeout(checkOrientation,300));
+
+  // ================= SETTINGS UI =================
+  const settings=$('#settings');
+  const openSettings=()=>{ applyCfg(); show('#settings'); };
+  $('#settingsBtn').addEventListener('click', openSettings);
+  $('#settingsBtn2').addEventListener('click', openSettings);
+  $('#settingsDone').addEventListener('click', ()=> hide('#settings'));
+  settings.addEventListener('click', e=>{ if(e.target===settings) hide('#settings'); });
+
+  bindRange('#sSpeed','speed','#vSpeed',v=>v+' px/s');
+  bindRange('#sFont','font','#vFont',v=>v+' px');
+  bindRange('#sWidth','width','#vWidth',v=>v+'%');
+  bindRange('#sDim','dim','#vDim',v=>v+'%');
+  function bindRange(sel,key,valSel,fmt){
+    const el=$(sel);
+    el.addEventListener('input', ()=>{ cfg[key]=+el.value; $(valSel).textContent=fmt(cfg[key]); applyCfg(); save(); });
+  }
+  document.querySelectorAll('#segPos button').forEach(b=> b.addEventListener('click', ()=>{ cfg.pos=b.dataset.pos; applyCfg(); save(); }));
+  document.querySelectorAll('#segCount button').forEach(b=> b.addEventListener('click', ()=>{ cfg.count=+b.dataset.c; applyCfg(); save(); }));
+  $('#swMirror').addEventListener('click', ()=>{ cfg.mirror=!cfg.mirror; applyCfg(); save(); });
+
+  // ---------- helpers ----------
+  function show(sel){ $(sel).classList.remove('hidden'); }
+  function hide(sel){ $(sel).classList.add('hidden'); }
+
+  // keyboard (handy on desktop while testing)
+  document.addEventListener('keydown', e=>{
+    if($('#prompter').classList.contains('hidden')) return;
+    if(e.code==='Space'){ e.preventDefault(); setScrolling(!scrolling); }
+    else if(e.code==='KeyR'){ recBtn.click(); }
+    else if(e.code==='Home'){ resetScroll(); }
+    else if(e.code==='ArrowUp'){ cfg.speed=Math.min(220,cfg.speed+5); applyCfg(); save(); }
+    else if(e.code==='ArrowDown'){ cfg.speed=Math.max(10,cfg.speed-5); applyCfg(); save(); }
+  });
+
+  // init defaults into controls
+  applyCfg();
+})();
+</script>
+</body>
+</html>
