@@ -317,14 +317,27 @@
     resInfo.classList.toggle('warn', !full);
   }
 
+  // browser-aware instructions for re-enabling a blocked camera
+  function permHelp(){
+    const ua=navigator.userAgent;
+    const iOS=/iPhone|iPad|iPod/.test(ua)||(navigator.maxTouchPoints>1 && /Macintosh/.test(ua));
+    if(/CriOS/.test(ua)) return 'In Chrome on iPhone: open the iPhone Settings app → Chrome, and turn ON Camera and Microphone. Then reload this page and tap Allow. (If it still won’t work, open the same link in Safari — it’s the most reliable on iPhone.)';
+    if(/FxiOS/.test(ua)) return 'In Firefox on iPhone: open the iPhone Settings app → Firefox, turn ON Camera and Microphone, then reload this page and tap Allow.';
+    if(iOS) return 'In Safari: tap the “aA” button at the left of the address bar → Website Settings → set Camera and Microphone to Allow, then reload.';
+    if(/Chrome|Edg/.test(ua)) return 'Click the camera icon at the right end of the address bar and choose “Allow”, then reload. On a Mac, also check System Settings → Privacy & Security → Camera is on for your browser.';
+    return 'Allow camera and microphone access for this page in your browser’s address-bar permissions, then reload.';
+  }
+
   function showCamError(err){
     let title='Camera unavailable', msg=err && err.message || String(err);
     const n = err && err.name;
     if(location.protocol!=='https:' && location.hostname!=='localhost'){
       title='Needs a secure (https) address';
       msg='Browsers only allow camera access over https. Open this page from its https link, then reload.';
-    } else if(n==='NotAllowedError'){ title='Camera permission blocked';
-      msg='Allow camera & microphone access for this page (check the address-bar "aA" menu on iOS → Website Settings), then tap Try again.';
+    } else if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      title='Camera not supported here';
+      msg='This browser can’t open the camera. On iPhone, use Safari or Chrome and make sure your iOS is up to date.';
+    } else if(n==='NotAllowedError' || n==='SecurityError'){ title='Camera permission blocked'; msg=permHelp();
     } else if(n==='NotFoundError'){ title='No camera found'; msg='This device reports no camera. Make sure nothing else is using it.'; }
     else if(n==='NotReadableError'){ title='Camera is busy'; msg='Another app is using the camera. Close it and try again.'; }
     $('#camErrTitle').textContent=title; $('#camErrMsg').textContent=msg;
