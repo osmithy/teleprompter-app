@@ -5,13 +5,16 @@ your script in a column right next to the camera lens while you record video —
 your eyes stay on-camera. The text is only ever an on-screen overlay; it is **never**
 baked into the recording.
 
-Built for an iPhone SE (2nd gen) held in **landscape with the camera on the left**,
-but the text column can be moved (left / center / right) for any setup.
+Built for an iPhone SE (2nd gen), and works in **either orientation**: hold it
+**landscape with the camera on the left** (text position **Left**) or **portrait with
+the camera at the top** (position **Top**), and the script scrolls right next to the
+lens. The text box can also be placed center / right to suit any setup.
 
 ## Using it
 
 1. Open the site on your phone and tap **Start camera** (allow camera + microphone).
-2. Rotate to landscape with the camera on the left.
+2. Rotate to landscape (camera on the left) or hold it portrait (camera at the top),
+   and pick the matching **text position** in Settings — **Left** or **Top**.
 3. Paste your script, tap the red **record** button — a countdown runs, then it records
    and scrolls together.
 4. Tap **stop**, then **Save to Photos**.
@@ -20,8 +23,9 @@ Tap the video area (or the play button) to pause/resume the scroll; drag it to s
 
 ## Settings
 
-Scroll speed · font size · column width · text dimming · text position · mirror
-preview · countdown length. Everything is remembered between sessions.
+Scroll speed · font size · text width · text dimming · text position (top / left /
+center / right) · mirror preview · countdown length. Everything is remembered
+between sessions.
 
 ## Notes on quality
 
