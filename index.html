@@ -573,6 +573,12 @@
   // init defaults into controls
   applyCfg();
 })();
+
+// keep the home-screen (PWA) copy fresh: a network-first service worker so the
+// app loads the latest version whenever you're online, no cache-clearing needed
+if('serviceWorker' in navigator){
+  addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
 </script>
 </body>
 </html>
