@@ -47,6 +47,7 @@
     display:flex;align-items:center;justify-content:center;gap:8px}
   .ghost{height:54px;padding:0 18px;border-radius:14px;background:var(--pill);font-size:16px;font-weight:550}
   .hint{color:var(--muted);font-size:13px;line-height:1.45;margin:0}
+  .build{color:#4a4a52;font-size:11px;text-align:center;margin:2px 0 0;font-variant-numeric:tabular-nums}
 
   /* ---------- Prompter screen ---------- */
   #preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
@@ -164,6 +165,7 @@
     </button>
   </div>
   <p class="hint">Works in <b>landscape</b> (camera on the left → text position <b>Left</b>) or <b>portrait</b> (camera at the top → position <b>Top</b>), so the words scroll right next to the lens and your eyes stay on-camera. Recording stays on your phone — the text is never in the video.</p>
+  <p class="build" id="buildTag"></p>
 </section>
 
 <!-- ============ PROMPTER ============ -->
@@ -256,6 +258,7 @@
 "use strict";
 (function(){
   const $ = s => document.querySelector(s);
+  const BUILD = 'v6 · 2026-07-25';   // bump each deploy so the app version is verifiable
 
   // ---------- persistent settings ----------
   const DEFAULTS = { speed:65, font:38, width:46, bandWidth:92, dim:35, pos:'left', mirror:true, count:3 };
@@ -474,7 +477,10 @@
     catch(e){ try{ recorder=new MediaRecorder(stream); }catch(e2){ alert('Recording is not supported in this browser.'); return; } }
     recorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
     recorder.onstop = onRecStop;
-    recorder.start(1000); // gather chunks each second (more robust on iOS)
+    // Record in ONE piece (no timeslice). iOS Safari drops the audio track from
+    // longer recordings when a timeslice is used (fragmented MP4 → silent past a
+    // certain length); recording without one keeps audio for the whole take.
+    recorder.start();
     recBtn.classList.add('recording');
     recStart=Date.now(); recIndicator.classList.remove('hidden'); tickRecTime();
     recTimer=setInterval(tickRecTime,250);
@@ -572,6 +578,7 @@
 
   // init defaults into controls
   applyCfg();
+  $('#buildTag').textContent = BUILD;
 })();
 
 // keep the home-screen (PWA) copy fresh: a network-first service worker so the
