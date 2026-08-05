@@ -30,6 +30,10 @@ struct PrompterView: View {
                 Color.black
                 CameraPreview(controller: camera)
 
+                if settings.cropGuide && geo.size.width > geo.size.height {
+                    cropGuideOverlay(in: geo.size)
+                }
+
                 TeleprompterBox(settings: settings, scroll: scroll, box: box,
                                 size: rect.size, textHeight: $textHeight)
                     .position(x: rect.midX, y: rect.midY)
@@ -269,6 +273,30 @@ struct PrompterView: View {
             .onEnded { _ in
                 scrubStartOffset = nil
             }
+    }
+
+    // MARK: - Portrait crop guide
+
+    /// Two vertical lines marking where a centered 9:16 portrait crop of the (16:9) landscape
+    /// frame would land. Overlay only — never part of the recording.
+    private func cropGuideOverlay(in size: CGSize) -> some View {
+        let cropWidth = size.height * (9.0 / 16.0)   // full height, 9:16 width
+        let inset = max(0, (size.width - cropWidth) / 2)
+        let line = Color.yellow.opacity(0.85)
+        return ZStack(alignment: .top) {
+            Rectangle().fill(line).frame(width: 2, height: size.height)
+                .position(x: inset, y: size.height / 2)
+            Rectangle().fill(line).frame(width: 2, height: size.height)
+                .position(x: size.width - inset, y: size.height / 2)
+            Text("Portrait 9:16 crop")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(line)
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(.black.opacity(0.45), in: Capsule())
+                .padding(.top, 10)
+        }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
     }
 }
 

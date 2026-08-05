@@ -54,6 +54,7 @@ final class Settings: ObservableObject {
     @Published var position: TextPosition = .left { didSet { persist() } }
     @Published var mirror: Bool = true { didSet { persist() } }
     @Published var countdown: Int = 3 { didSet { persist() } }          // 0 / 3 / 5
+    @Published var cropGuide: Bool = false { didSet { persist() } }     // 9:16 portrait-crop guide
     @Published var scriptText: String = Settings.sampleScript { didSet { persist() } }
 
     private var loaded = false
@@ -92,6 +93,7 @@ final class Settings: ObservableObject {
         if let v = d.string(forKey: Keys.position), let p = TextPosition(rawValue: v) { position = p }
         if let v = d.object(forKey: Keys.mirror) as? Bool { mirror = v }
         if let v = d.object(forKey: Keys.countdown) as? Int { countdown = v }
+        if let v = d.object(forKey: Keys.cropGuide) as? Bool { cropGuide = v }
         if let v = d.string(forKey: Keys.script) { scriptText = v }
         loaded = true
     }
@@ -107,6 +109,7 @@ final class Settings: ObservableObject {
         d.set(position.rawValue, forKey: Keys.position)
         d.set(mirror, forKey: Keys.mirror)
         d.set(countdown, forKey: Keys.countdown)
+        d.set(cropGuide, forKey: Keys.cropGuide)
         d.set(scriptText, forKey: Keys.script)
     }
 
@@ -119,6 +122,7 @@ final class Settings: ObservableObject {
         static let position = "tp.pos"
         static let mirror = "tp.mirror"
         static let countdown = "tp.count"
+        static let cropGuide = "tp.cropGuide"
         static let script = "tp.script"
     }
 

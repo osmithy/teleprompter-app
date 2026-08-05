@@ -41,6 +41,12 @@ struct SettingsSheet: View {
                     }
                     .pickerStyle(.segmented)
                 }
+
+                Section {
+                    Toggle("Portrait crop guide", isOn: $settings.cropGuide)
+                } footer: {
+                    Text("Marks where a centered 9:16 portrait crop of your landscape frame would land (shown in landscape), so you can frame yourself inside it. Never recorded.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
