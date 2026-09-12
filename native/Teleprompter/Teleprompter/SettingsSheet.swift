@@ -21,6 +21,10 @@ struct SettingsSheet: View {
                               value: Binding(get: { settings.currentWidth },
                                              set: { settings.currentWidth = $0 }),
                               range: 25...100, step: 1, suffix: "%")
+                    if settings.position == .top {
+                        sliderRow("Text height", value: $settings.bandHeight,
+                                  range: 20...85, step: 1, suffix: "%")
+                    }
                     sliderRow("Text dimming", value: $settings.dim, range: 0...85, step: 5, suffix: "%")
                 }
 
@@ -44,8 +48,9 @@ struct SettingsSheet: View {
 
                 Section {
                     Toggle("Portrait crop guide", isOn: $settings.cropGuide)
+                    Toggle("Rule of thirds", isOn: $settings.thirds)
                 } footer: {
-                    Text("Marks where a centered 9:16 portrait crop of your landscape frame would land (shown in landscape), so you can frame yourself inside it. Never recorded.")
+                    Text("Framing guides — never recorded. The crop guide (landscape only) marks a centered 9:16 portrait crop; rule of thirds shows a 3×3 grid.")
                 }
             }
             .navigationTitle("Settings")

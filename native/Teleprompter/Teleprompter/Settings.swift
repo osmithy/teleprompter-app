@@ -50,11 +50,13 @@ final class Settings: ObservableObject {
     @Published var font: Double = 38 { didSet { persist() } }           // pt
     @Published var columnWidth: Double = 46 { didSet { persist() } }    // % of width (side columns)
     @Published var bandWidth: Double = 92 { didSet { persist() } }      // % of width (top band)
+    @Published var bandHeight: Double = 46 { didSet { persist() } }     // % of height (top band)
     @Published var dim: Double = 35 { didSet { persist() } }            // 0…85 %
     @Published var position: TextPosition = .left { didSet { persist() } }
     @Published var mirror: Bool = true { didSet { persist() } }
     @Published var countdown: Int = 3 { didSet { persist() } }          // 0 / 3 / 5
     @Published var cropGuide: Bool = false { didSet { persist() } }     // 9:16 portrait-crop guide
+    @Published var thirds: Bool = false { didSet { persist() } }        // rule-of-thirds grid
     @Published var scriptText: String = Settings.sampleScript { didSet { persist() } }
 
     private var loaded = false
@@ -75,7 +77,7 @@ final class Settings: ObservableObject {
             return TextBox(xPct: (100 - w) / 2, yPct: 0, wPct: w, hPct: 100, focus: 0.5,
                            alignment: .center, frameAlignment: .center)
         case .top:
-            return TextBox(xPct: (100 - w) / 2, yPct: 4, wPct: w, hPct: 46, focus: 0.28,
+            return TextBox(xPct: (100 - w) / 2, yPct: 4, wPct: w, hPct: bandHeight, focus: 0.28,
                            alignment: .center, frameAlignment: .center)
         case .left:
             return TextBox(xPct: 0, yPct: 0, wPct: w, hPct: 100, focus: 0.5,
@@ -89,11 +91,13 @@ final class Settings: ObservableObject {
         if let v = d.object(forKey: Keys.font) as? Double { font = v }
         if let v = d.object(forKey: Keys.columnWidth) as? Double { columnWidth = v }
         if let v = d.object(forKey: Keys.bandWidth) as? Double { bandWidth = v }
+        if let v = d.object(forKey: Keys.bandHeight) as? Double { bandHeight = v }
         if let v = d.object(forKey: Keys.dim) as? Double { dim = v }
         if let v = d.string(forKey: Keys.position), let p = TextPosition(rawValue: v) { position = p }
         if let v = d.object(forKey: Keys.mirror) as? Bool { mirror = v }
         if let v = d.object(forKey: Keys.countdown) as? Int { countdown = v }
         if let v = d.object(forKey: Keys.cropGuide) as? Bool { cropGuide = v }
+        if let v = d.object(forKey: Keys.thirds) as? Bool { thirds = v }
         if let v = d.string(forKey: Keys.script) { scriptText = v }
         loaded = true
     }
@@ -105,11 +109,13 @@ final class Settings: ObservableObject {
         d.set(font, forKey: Keys.font)
         d.set(columnWidth, forKey: Keys.columnWidth)
         d.set(bandWidth, forKey: Keys.bandWidth)
+        d.set(bandHeight, forKey: Keys.bandHeight)
         d.set(dim, forKey: Keys.dim)
         d.set(position.rawValue, forKey: Keys.position)
         d.set(mirror, forKey: Keys.mirror)
         d.set(countdown, forKey: Keys.countdown)
         d.set(cropGuide, forKey: Keys.cropGuide)
+        d.set(thirds, forKey: Keys.thirds)
         d.set(scriptText, forKey: Keys.script)
     }
 
@@ -118,11 +124,13 @@ final class Settings: ObservableObject {
         static let font = "tp.font"
         static let columnWidth = "tp.colW"
         static let bandWidth = "tp.bandW"
+        static let bandHeight = "tp.bandH"
         static let dim = "tp.dim"
         static let position = "tp.pos"
         static let mirror = "tp.mirror"
         static let countdown = "tp.count"
         static let cropGuide = "tp.cropGuide"
+        static let thirds = "tp.thirds"
         static let script = "tp.script"
     }
 

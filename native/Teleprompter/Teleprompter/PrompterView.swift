@@ -33,6 +33,9 @@ struct PrompterView: View {
                 if settings.cropGuide && geo.size.width > geo.size.height {
                     cropGuideOverlay(in: geo.size)
                 }
+                if settings.thirds {
+                    thirdsOverlay(in: geo.size)
+                }
 
                 TeleprompterBox(settings: settings, scroll: scroll, box: box,
                                 size: rect.size, textHeight: $textHeight)
@@ -296,6 +299,22 @@ struct PrompterView: View {
                 .padding(.top, 10)
         }
         .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Rule-of-thirds guide
+
+    /// A 3×3 grid (two vertical + two horizontal lines). Overlay only — never recorded.
+    private func thirdsOverlay(in size: CGSize) -> some View {
+        let color = Color.white.opacity(0.35)
+        let w = size.width, h = size.height
+        return ZStack {
+            Rectangle().fill(color).frame(width: 1, height: h).position(x: w / 3, y: h / 2)
+            Rectangle().fill(color).frame(width: 1, height: h).position(x: 2 * w / 3, y: h / 2)
+            Rectangle().fill(color).frame(width: w, height: 1).position(x: w / 2, y: h / 3)
+            Rectangle().fill(color).frame(width: w, height: 1).position(x: w / 2, y: 2 * h / 3)
+        }
+        .frame(width: w, height: h)
         .allowsHitTesting(false)
     }
 }
