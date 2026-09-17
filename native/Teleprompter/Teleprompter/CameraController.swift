@@ -29,6 +29,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureFileOutputRec
     @Published var statusMessage = "Starting camera…"
     @Published var errorMessage: String?
     @Published var toast: String?
+    /// Native capture aspect (width / height, e.g. 1920/1080). Framing guides use this so they
+    /// line up with the real frame rather than the whole screen when the preview is letterboxed.
+    @Published var captureAspect: CGFloat = 16.0 / 9.0
+    /// A frame from the most recent take, shown on the Photos shortcut button.
+    @Published var lastThumbnail: UIImage?
 
     // MARK: - Capture objects
     let session = AVCaptureSession()
@@ -45,7 +50,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureFileOutputRec
     override init() {
         super.init()
         previewLayer.session = session
-        previewLayer.videoGravity = .resizeAspectFill
+        // .resizeAspect (fit) rather than .resizeAspectFill so the preview always shows the
+        // ENTIRE captured frame, letterboxed when the screen's shape differs from the camera's.
+        // Filling would crop the preview and hide parts of the shot that still land in the file.
+        previewLayer.videoGravity = .resizeAspect
+        loadPersistedThumbnail()
     }
 
     // MARK: - Start / stop
@@ -256,7 +265,43 @@ final class CameraController: NSObject, ObservableObject, AVCaptureFileOutputRec
                 return
             }
         }
-        saveToPhotos(outputFileURL)
+        // Grab the thumbnail first — saveToPhotos deletes the temp file when it finishes.
+        makeThumbnail(from: outputFileURL) { [weak self] in
+            self?.saveToPhotos(outputFileURL)
+        }
+    }
+
+    // MARK: - Last-take thumbnail (powers the Photos shortcut)
+
+    /// Pull a frame from the finished take for the library button. Reading our own local file
+    /// means this needs no read access to the photo library — the app stays add-only.
+    private func makeThumbnail(from url: URL, completion: @escaping () -> Void) {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true   // honour the recorded rotation
+        generator.maximumSize = CGSize(width: 240, height: 240)
+        generator.generateCGImageAsynchronously(
+            for: CMTime(seconds: 0.1, preferredTimescale: 600)
+        ) { [weak self] cgImage, _, _ in
+            defer { completion() }                        // always save, thumbnail or not
+            guard let self, let cgImage else { return }
+            let image = UIImage(cgImage: cgImage)
+            self.onMain { self.lastThumbnail = image }
+            if let data = image.jpegData(compressionQuality: 0.8) {
+                try? data.write(to: Self.thumbnailURL)
+            }
+        }
+    }
+
+    private static var thumbnailURL: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("last-take.jpg")
+    }
+
+    /// Restore the last take's thumbnail so the button survives a relaunch.
+    private func loadPersistedThumbnail() {
+        if let data = try? Data(contentsOf: Self.thumbnailURL), let image = UIImage(data: data) {
+            lastThumbnail = image
+        }
     }
 
     // MARK: - Save to Photos (add-only)
@@ -287,6 +332,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureFileOutputRec
         let dims = CMVideoFormatDescriptionGetDimensions(camera.activeFormat.formatDescription)
         let fps = camera.activeFormat.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 0
         resolutionText = "\(dims.width)×\(dims.height)" + (fps > 0 ? " · \(Int(fps.rounded())) fps" : "")
+        if dims.width > 0 && dims.height > 0 {
+            captureAspect = CGFloat(dims.width) / CGFloat(dims.height)
+        }
     }
 
     private func showToast(_ message: String) {

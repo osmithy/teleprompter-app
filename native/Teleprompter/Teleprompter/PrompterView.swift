@@ -28,13 +28,13 @@ struct PrompterView: View {
 
             ZStack {
                 Color.black
-                CameraPreview(controller: camera)
+                CameraPreview(controller: camera, onCaptureButton: onRecordTapped)
 
                 if settings.cropGuide && geo.size.width > geo.size.height {
-                    cropGuideOverlay(in: geo.size)
+                    cropGuideOverlay(in: videoRect(in: geo.size))
                 }
                 if settings.thirds {
-                    thirdsOverlay(in: geo.size)
+                    thirdsOverlay(in: videoRect(in: geo.size))
                 }
 
                 TeleprompterBox(settings: settings, scroll: scroll, box: box,
@@ -51,6 +51,12 @@ struct PrompterView: View {
 
                 controlsLayer
                 topBarLayer
+
+                // Photos shortcut — hidden mid-take so it can't background the app and
+                // interrupt an in-progress recording.
+                if !camera.isRecording && countdownValue == nil {
+                    libraryButton
+                }
 
                 if camera.isRecording { recordingIndicator }
                 if let value = countdownValue { countdownOverlay(value) }
@@ -280,9 +286,10 @@ struct PrompterView: View {
 
     // MARK: - Portrait crop guide
 
-    /// Two vertical lines marking where a centered 9:16 portrait crop of the (16:9) landscape
-    /// frame would land. Overlay only — never part of the recording.
-    private func cropGuideOverlay(in size: CGSize) -> some View {
+    /// Two vertical lines marking where a centered 9:16 portrait crop of the landscape frame
+    /// would land. Drawn inside the real video rect. Overlay only — never part of the recording.
+    private func cropGuideOverlay(in rect: CGRect) -> some View {
+        let size = rect.size
         let cropWidth = size.height * (9.0 / 16.0)   // full height, 9:16 width
         let inset = max(0, (size.width - cropWidth) / 2)
         let line = Color.yellow.opacity(0.85)
@@ -299,15 +306,17 @@ struct PrompterView: View {
                 .padding(.top, 10)
         }
         .frame(width: size.width, height: size.height)
+        .position(x: rect.midX, y: rect.midY)
         .allowsHitTesting(false)
     }
 
     // MARK: - Rule-of-thirds guide
 
-    /// A 3×3 grid (two vertical + two horizontal lines). Overlay only — never recorded.
-    private func thirdsOverlay(in size: CGSize) -> some View {
+    /// A 3×3 grid (two vertical + two horizontal lines) over the real video rect.
+    /// Overlay only — never recorded.
+    private func thirdsOverlay(in rect: CGRect) -> some View {
         let color = Color.white.opacity(0.35)
-        let w = size.width, h = size.height
+        let w = rect.width, h = rect.height
         return ZStack {
             Rectangle().fill(color).frame(width: 1, height: h).position(x: w / 3, y: h / 2)
             Rectangle().fill(color).frame(width: 1, height: h).position(x: 2 * w / 3, y: h / 2)
@@ -315,7 +324,70 @@ struct PrompterView: View {
             Rectangle().fill(color).frame(width: w, height: 1).position(x: w / 2, y: 2 * h / 3)
         }
         .frame(width: w, height: h)
+        .position(x: rect.midX, y: rect.midY)
         .allowsHitTesting(false)
+    }
+
+    // MARK: - Photos shortcut
+
+    /// Lower-left thumbnail of the last take, like the Camera app's library button.
+    private var libraryButton: some View {
+        Button(action: openPhotoLibrary) {
+            Group {
+                if let thumbnail = camera.lastThumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(.black.opacity(0.5))
+                }
+            }
+            .frame(width: 52, height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(.white.opacity(0.85), lineWidth: 1.5)
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .padding(.leading, 18)
+        .padding(.bottom, 18)
+    }
+
+    private func openPhotoLibrary() {
+        let app = UIApplication.shared
+        guard let url = URL(string: "photos-redirect://") else { return }
+        app.open(url) { opened in
+            if !opened, let fallback = URL(string: "photos://") {
+                app.open(fallback)
+            }
+        }
+    }
+
+    // MARK: - Video rect
+
+    /// Where the camera image actually sits on screen. With `.resizeAspect` the whole captured
+    /// frame is shown and letterboxed when the screen's shape differs from the camera's, so the
+    /// framing guides must be anchored to this rect rather than to the full screen.
+    private func videoRect(in size: CGSize) -> CGRect {
+        let native = camera.captureAspect                 // e.g. 1920/1080
+        guard native > 0, size.width > 0, size.height > 0 else {
+            return CGRect(origin: .zero, size: size)
+        }
+        // The frame is rotated for display, so in portrait the visible aspect is inverted.
+        let aspect = size.width > size.height ? native : 1 / native
+        let screenAspect = size.width / size.height
+        if screenAspect > aspect {
+            let h = size.height, w = h * aspect           // pillarboxed
+            return CGRect(x: (size.width - w) / 2, y: 0, width: w, height: h)
+        } else {
+            let w = size.width, h = w / aspect            // letterboxed
+            return CGRect(x: 0, y: (size.height - h) / 2, width: w, height: h)
+        }
     }
 }
 
